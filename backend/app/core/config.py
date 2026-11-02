@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-change-me"
     access_token_expire_minutes: int = 60 * 24 * 7
 
-    database_url: str = "postgresql+psycopg://billchecker:billchecker@localhost:5432/billchecker"
+    database_url: str = "postgresql+psycopg://billchecker:billchecker@localhost:5433/billchecker"
     redis_url: str = "redis://localhost:6379/0"
 
     # Storage: "minio" (S3-compatible) or "fs" (local filesystem)
