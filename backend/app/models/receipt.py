@@ -71,8 +71,14 @@ class Receipt(UUIDPrimaryKey, Timestamped, Base):
     user_confirmed: Mapped[bool] = mapped_column(default=False)
 
     session: Mapped[AuditSession] = relationship(back_populates="receipts")
-    items: Mapped[list["ReceiptItem"]] = relationship(back_populates="receipt")
-    discounts: Mapped[list["ReceiptDiscount"]] = relationship(back_populates="receipt")
+    # delete-orphan: children exist only inside their receipt — replacing the
+    # collection deletes the old rows (keeps ORM state and DB in sync)
+    items: Mapped[list["ReceiptItem"]] = relationship(
+        back_populates="receipt", cascade="all, delete-orphan"
+    )
+    discounts: Mapped[list["ReceiptDiscount"]] = relationship(
+        back_populates="receipt", cascade="all, delete-orphan"
+    )
 
 
 class ReceiptItem(UUIDPrimaryKey, Base):

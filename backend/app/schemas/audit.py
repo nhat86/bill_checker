@@ -51,6 +51,15 @@ class ReceiptItemOut(ReceiptItemIn):
     model_config = {"from_attributes": True}
 
 
+class ReceiptDiscountOut(BaseModel):
+    id: uuid.UUID
+    description: str | None
+    amount: Decimal
+    discount_type: str | None
+
+    model_config = {"from_attributes": True}
+
+
 class ReceiptOut(BaseModel):
     id: uuid.UUID
     session_id: uuid.UUID
@@ -61,6 +70,7 @@ class ReceiptOut(BaseModel):
     parse_confidence: Decimal | None
     user_confirmed: bool
     items: list[ReceiptItemOut] = []
+    discounts: list[ReceiptDiscountOut] = []
 
     model_config = {"from_attributes": True}
 

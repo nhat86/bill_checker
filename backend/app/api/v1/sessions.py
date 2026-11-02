@@ -8,7 +8,9 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models import AuditSession, BasketItem, Receipt, User
-from app.schemas import AuditSessionDetailOut, AuditSessionOut, UploadResult
+from app.schemas import AuditSessionDetailOut, AuditSessionOut, ReceiptOut, UploadResult
+from app.services.ocr import OCRProvider, OCRProviderError, get_ocr_provider
+from app.services.receipt_parse import apply_extraction
 from app.services.storage import StorageBackend, get_storage
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -79,6 +81,7 @@ def get_session(
         .options(
             selectinload(AuditSession.basket_items),
             selectinload(AuditSession.receipts).selectinload(Receipt.items),
+            selectinload(AuditSession.receipts).selectinload(Receipt.discounts),
         )
     )
     return AuditSessionDetailOut.model_validate(db.scalar(stmt))
@@ -130,3 +133,37 @@ async def upload_receipt(
         object_key=key, kind="receipt", session_id=session.id,
         size_bytes=len(data), content_type=file.content_type,
     )
+
+
+@router.post("/{session_id}/receipts/{receipt_id}/parse", response_model=ReceiptOut)
+def parse_receipt(
+    session_id: uuid.UUID,
+    receipt_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage),
+    ocr: OCRProvider = Depends(get_ocr_provider),
+):
+    session = _owned_session(session_id, user, db)
+    receipt = db.get(Receipt, receipt_id)
+    if receipt is None or receipt.session_id != session.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket introuvable")
+    if not receipt.image_ref:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucune image associée au ticket")
+
+    image = storage.get(receipt.image_ref)
+    try:
+        extraction = ocr.extract(image, content_type="image/jpeg")
+    except OCRProviderError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    apply_extraction(db, receipt, extraction)
+    db.commit()
+
+    # return the receipt with its fresh items + discounts
+    stmt = (
+        select(Receipt)
+        .where(Receipt.id == receipt.id)
+        .options(selectinload(Receipt.items), selectinload(Receipt.discounts))
+    )
+    return ReceiptOut.model_validate(db.scalar(stmt))

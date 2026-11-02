@@ -182,7 +182,57 @@ docker compose up -d db          # host port 5433 (5432 = local PG service)
 
 `pytest -q` → 10 passed in ~9s.
 
+## Task 5 — Receipt OCR pipeline (done)
+
+### Implemented
+
+- `services/ocr/types.py` — `ReceiptExtraction`/`ReceiptLineExtraction`
+  schemas + `OCRProvider` Protocol + `OCRProviderError`
+- `services/ocr/groq_provider.py` — Groq vision, strict-JSON prompt
+  (French, "n'invente rien"), temperature=0, Pydantic-validated output
+- `services/ocr/fixture.py` — canned Carrefour receipt (OCR_BACKEND=fixture,
+  dev without API key)
+- `services/receipt_parse.py` — deterministic validator: per-line math
+  (qty×unit≈total), sum(items)+sum(discounts)≈total ±0.02 → adjusts
+  confidence, writes items/discounts, logs `receipt_parsed` AuditEvent
+- `POST /sessions/{sid}/receipts/{rid}/parse` endpoint
+- `Receipt.discounts`/`items` now `cascade="all, delete-orphan"`
+
+### Concepts learned
+
+- **AI extracts, Python verifies**: provider returns claims; deterministic
+  arithmetic re-scores confidence. Model says 0.9, math says otherwise →
+  math wins.
+- **Protocol typing**: `OCRProvider` is a duck-typed interface — groq,
+  fixture, future PaddleOCR all satisfy it without a common base class.
+- **delete-orphan cascade** + assigning collections wholesale
+  (`receipt.items = [...]`): keeps ORM identity-map state equal to DB —
+  bypassing the collection (db.add with raw FK) caused a stale-empty
+  response bug caught by tests.
+- **Idempotent re-parse**: replacing the collection means re-running parse
+  never duplicates rows.
+- **temperature=0** for extraction tasks — we want determinism, not
+  creativity; `response_format=json_object` forces parseable output.
+
+### Verified
+
+- 15/15 tests pass (5 new OCR tests: items+discounts created, incoherent
+  total penalized, bad line math penalized, idempotent re-parse, 404s)
+- Live: fixture backend → parse → real rows + AuditEvent, confidence 1.0
+
 ### Open questions / decisions
+
+- Groq live path untested — needs GROQ_API_KEY in `.env` and a real receipt
+  photo (model: llama-4-scout). Fixture proves the pipeline; real-model
+  tuning (prompt, model choice) is a later calibration task.
+
+### Commands reference
+
+```bash
+OCR_BACKEND=fixture .venv/Scripts/uvicorn app.main:app --port 8000
+curl -X POST .../sessions/$SID/receipts/$RID/parse -H "Authorization: Bearer $TOKEN"
+```
+
 
 - Auth is JWT-bearer (simple, mobile/PWA-friendly). Refresh tokens deferred.
 - Async jobs: FastAPI `BackgroundTasks` for now; Celery+Redis later.
