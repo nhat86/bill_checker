@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_env: str = "development"
-    secret_key: str = "dev-secret-change-me"
+    secret_key: str = "dev-secret-change-me-in-production-32bytes"
     access_token_expire_minutes: int = 60 * 24 * 7
 
     database_url: str = "postgresql+psycopg://billchecker:billchecker@localhost:5433/billchecker"

@@ -9,7 +9,7 @@ from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models import AuditSession, BasketItem, Receipt, User
 from app.schemas import AuditSessionDetailOut, AuditSessionOut, UploadResult
-from app.services import get_storage
+from app.services.storage import StorageBackend, get_storage
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -90,12 +90,13 @@ async def upload_basket_photo(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage),
 ):
     session = _owned_session(session_id, user, db)
     data, ext = await _read_image(file)
 
     key = f"sessions/{session.id}/basket/{uuid.uuid4().hex}.{ext}"
-    get_storage().put(key, data, content_type=file.content_type)
+    storage.put(key, data, content_type=file.content_type)
 
     item = BasketItem(session_id=session.id, image_ref=key)
     db.add(item)
@@ -113,12 +114,13 @@ async def upload_receipt(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage),
 ):
     session = _owned_session(session_id, user, db)
     data, ext = await _read_image(file)
 
     key = f"sessions/{session.id}/receipts/{uuid.uuid4().hex}.{ext}"
-    get_storage().put(key, data, content_type=file.content_type)
+    storage.put(key, data, content_type=file.content_type)
 
     receipt = Receipt(session_id=session.id, image_ref=key)
     db.add(receipt)

@@ -150,6 +150,38 @@ docker compose up -d db          # host port 5433 (5432 = local PG service)
 - Detail endpoint returns nested basket_items + receipts
 - text/plain → 415; other user's session → 404
 
+## Task 4 — Test harness (done)
+
+### Implemented
+
+- `tests/conftest.py` — SQLite-in-memory engine (StaticPool), tmp-dir
+  storage, `dependency_overrides` for get_db/get_storage, `client` +
+  `auth_headers` fixtures
+- `tests/test_api.py` — 10 API contract tests: auth, sessions, upload
+  validation, user isolation
+- Refactored `sessions.py`: storage is now `Depends(get_storage)` so tests
+  can override it (was a direct call — unswappable)
+- Fixed dev SECRET_KEY length (HS256 needs ≥32 bytes) + asyncio pytest config
+
+### Concepts learned
+
+- **Arrange-Act-Assert**: fixture sets up → client.post() acts → assert
+  checks status + JSON contract.
+- **Fixtures = pytest's DI**: `def test_x(client, auth_headers)` — pytest
+  injects by argument name; `yield` splits setup/teardown.
+- **dependency_overrides**: `app.dependency_overrides[get_db] = fake` — the
+  swap point. This is THE reason we inject rather than call directly.
+- **StaticPool**: in-memory SQLite is per-connection — StaticPool shares one
+  connection or tables vanish between queries.
+- **TestClient**: runs the real ASGI app in-process — full stack test, zero
+  network.
+- **Test the contract**: status codes, isolation (404 across users), "hash
+  never in response" — not internals.
+
+### Verified
+
+`pytest -q` → 10 passed in ~9s.
+
 ### Open questions / decisions
 
 - Auth is JWT-bearer (simple, mobile/PWA-friendly). Refresh tokens deferred.
