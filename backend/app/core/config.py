@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     local_storage_dir: str = "./data/uploads"
 
     groq_api_key: str = ""
+    groq_vision_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    # "groq" for real OCR, "fixture" for offline dev (returns canned receipt)
+    ocr_backend: str = "groq"
 
     frontend_origin: str = "http://localhost:3000"
 
