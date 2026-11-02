@@ -8,7 +8,16 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models import AuditSession, BasketItem, Receipt, User
-from app.schemas import AuditSessionDetailOut, AuditSessionOut, ReceiptOut, UploadResult
+from app.schemas import (
+    AuditFindingOut,
+    AuditSessionDetailOut,
+    AuditSessionOut,
+    BasketItemIn,
+    BasketItemOut,
+    ReceiptOut,
+    UploadResult,
+)
+from app.services.audit_runner import run_billing_audit
 from app.services.ocr import OCRProvider, OCRProviderError, get_ocr_provider
 from app.services.receipt_parse import apply_extraction
 from app.services.storage import StorageBackend, get_storage
@@ -167,3 +176,39 @@ def parse_receipt(
         .options(selectinload(Receipt.items), selectinload(Receipt.discounts))
     )
     return ReceiptOut.model_validate(db.scalar(stmt))
+
+
+@router.post("/{session_id}/basket-items", response_model=BasketItemOut, status_code=status.HTTP_201_CREATED)
+def add_basket_item(
+    session_id: uuid.UUID,
+    payload: BasketItemIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Manual basket entry — until photo recognition exists, users confirm
+    what they bought by typing it. user_confirmed=True marks ground truth."""
+    session = _owned_session(session_id, user, db)
+    item = BasketItem(
+        session_id=session.id,
+        label=payload.label,
+        ean=payload.ean,
+        quantity=payload.quantity,
+        user_confirmed=payload.user_confirmed,
+    )
+    db.add(item)
+    if session.status == "DRAFT":
+        session.status = "PRODUCTS_CAPTURED"
+    db.commit()
+    db.refresh(item)
+    return BasketItemOut.model_validate(item)
+
+
+@router.post("/{session_id}/audit", response_model=list[AuditFindingOut])
+def run_audit(
+    session_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session = _owned_session(session_id, user, db)
+    findings = run_billing_audit(db, session)
+    return [AuditFindingOut.model_validate(f) for f in findings]

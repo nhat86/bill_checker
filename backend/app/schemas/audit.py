@@ -78,3 +78,19 @@ class ReceiptOut(BaseModel):
 class AuditSessionDetailOut(AuditSessionOut):
     basket_items: list[BasketItemOut] = []
     receipts: list[ReceiptOut] = []
+
+
+class AuditFindingOut(BaseModel):
+    id: uuid.UUID
+    finding_type: str
+    status: str
+    product_name: str | None
+    expected_amount: Decimal | None
+    actual_amount: Decimal | None
+    difference: Decimal | None
+    confidence: Decimal | None
+    evidence: dict
+    explanation_fr: str | None
+    is_deferred: bool
+
+    model_config = {"from_attributes": True}

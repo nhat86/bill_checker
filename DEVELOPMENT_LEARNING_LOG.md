@@ -233,6 +233,46 @@ OCR_BACKEND=fixture .venv/Scripts/uvicorn app.main:app --port 8000
 curl -X POST .../sessions/$SID/receipts/$RID/parse -H "Authorization: Bearer $TOKEN"
 ```
 
+## Task 6 — Quantity & Billing audit engine (done)
+
+### Implemented
+
+- `app/engines/types.py` — pure dataclasses (BasketEntry, ReceiptLine,
+  Finding) + `normalize()` text match keys
+- `app/engines/billing.py` — `audit_quantities` (basket vs receipt per
+  match key) + `audit_billing` (duplicate lines, per-line math,
+  discounts-aware total check)
+- `app/services/audit_runner.py` — DB↔engine bridge, idempotent
+  (deletes its own finding types before re-run), logs AuditEvent
+- `POST /sessions/{id}/basket-items` — manual basket entry (until
+  photo recognition exists)
+- `POST /sessions/{id}/audit` — runs engines, returns findings
+
+### Concepts learned
+
+- **Engines are pure**: no FastAPI/SQLAlchemy imports — dataclasses in,
+  Findings out. Unit tests need zero fixtures.
+- **Match keys**: `ean:{code}` beats `txt:{normalized}` — EAN is identity,
+  wording varies ("LAIT D/ECR" vs "lait demi écrémé").
+- **Statuses carry doubt**: CONFIRMED (math provably wrong) vs POTENTIAL
+  (strong suspicion) vs NEEDS_CONFIRMATION (unverified input) vs
+  UNVERIFIABLE — the API must not cry fraud on uncertainty.
+- **Bug caught live**: total check ignored receipt_discounts → false
+  TOTAL_MISMATCH on a consistent ticket (discounts live on separate
+  French receipt lines — always include them in sums).
+- **Idempotent engines**: runner deletes its own finding_types before
+  re-running — same guarantee as re-parse.
+
+### Verified
+
+- 26/26 tests (11 engine scenarios: match, overbilling, unpurchased,
+  missing, EAN unify, duplicates, arithmetic, total, discount-aware total)
+- Live: basket==receipt → []; 1 lait vs 2 charged → QUANTITY_MISMATCH 1,45€
+
+### Next candidates
+
+Promotion rules engine (BUY_X_GET_Y etc.) · product recognition · frontend
+
 
 - Auth is JWT-bearer (simple, mobile/PWA-friendly). Refresh tokens deferred.
 - Async jobs: FastAPI `BackgroundTasks` for now; Celery+Redis later.
