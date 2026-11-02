@@ -119,6 +119,37 @@ docker compose up -d db          # host port 5433 (5432 = local PG service)
 # Swagger UI: http://localhost:8000/docs
 ```
 
+## Task 3 — Audit sessions & file upload (done)
+
+### Implemented
+
+- `app/api/v1/sessions.py` — create/list/detail sessions, basket-photo and
+  receipt uploads
+- `AuditSessionDetailOut` — nested response schema (items + receipts)
+- Session status transitions: DRAFT → PRODUCTS_CAPTURED → RECEIPT_UPLOADED
+
+### Concepts learned
+
+- **UploadFile / multipart**: file uploads aren't JSON — browser sends
+  `multipart/form-data`; FastAPI exposes `UploadFile` via `File(...)`.
+- **Validation boundary**: content-type allowlist (415) + size cap (413)
+  checked BEFORE touching storage — never trust `file.filename` or the
+  declared type blindly.
+- **Object keys**: `sessions/{sid}/basket/{uuid}.{ext}` — unguessable,
+  organized by owner, opaque. DB stores the key, storage holds bytes.
+- **Anti-enumeration (again)**: other user's session → 404 not 403 —
+  don't reveal the resource exists.
+- **N+1 problem**: loading `session.basket_items` lazily fires 1 query per
+  item. `selectinload` fetches children in 2 queries total (IN-list join).
+- **Windows gotcha**: Git Bash `/tmp` ≠ Windows curl path — native curl.exe
+  needs `C:/...` in `-F "file=@..."`.
+
+### Verified
+
+- Upload PNG → `UploadResult` + file on disk under `data/uploads/sessions/...`
+- Detail endpoint returns nested basket_items + receipts
+- text/plain → 415; other user's session → 404
+
 ### Open questions / decisions
 
 - Auth is JWT-bearer (simple, mobile/PWA-friendly). Refresh tokens deferred.

@@ -63,3 +63,8 @@ class ReceiptOut(BaseModel):
     items: list[ReceiptItemOut] = []
 
     model_config = {"from_attributes": True}
+
+
+class AuditSessionDetailOut(AuditSessionOut):
+    basket_items: list[BasketItemOut] = []
+    receipts: list[ReceiptOut] = []
